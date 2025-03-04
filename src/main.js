@@ -1,14 +1,55 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GammaCorrectionShader } from 'three/examples/jsm/shaders/GammaCorrectionShader.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { planetData } from './planetData.js';
+
+// Import sun shaders
+import sunVertexShader from './shaders/sunVertex.glsl?raw';
+import sunFragmentShader from './shaders/sunFragment.glsl?raw';
 
 // Scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ 
+    antialias: true,
+    powerPreference: "high-performance"
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 document.body.appendChild(renderer.domElement);
+
+// Post-processing setup
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+// Bloom effect for the sun and stars
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.5,    // strength
+    0.4,    // radius
+    0.85    // threshold
+);
+composer.addPass(bloomPass);
+
+// FXAA pass for anti-aliasing
+const fxaaPass = new ShaderPass(FXAAShader);
+fxaaPass.material.uniforms['resolution'].value.set(
+    1 / (window.innerWidth * renderer.getPixelRatio()),
+    1 / (window.innerHeight * renderer.getPixelRatio())
+);
+composer.addPass(fxaaPass);
+
+// Gamma correction pass
+const gammaCorrectionPass = new ShaderPass(GammaCorrectionShader);
+composer.addPass(gammaCorrectionPass);
 
 // Lighting
 const ambientLight = new THREE.AmbientLight(0x333333);
@@ -34,10 +75,13 @@ const starsGeometry = new THREE.BufferGeometry();
 const starsMaterial = new THREE.PointsMaterial({
     color: 0xffffff,
     size: 0.1,
+    transparent: true,
+    opacity: 0.8,
+    sizeAttenuation: true
 });
 
 const starsVertices = [];
-for (let i = 0; i < 10000; i++) {
+for (let i = 0; i < 15000; i++) {
     const x = (Math.random() - 0.5) * 2000;
     const y = (Math.random() - 0.5) * 2000;
     const z = (Math.random() - 0.5) * 2000;
@@ -56,13 +100,21 @@ const textureLoader = new THREE.TextureLoader();
 // Track orbital angles for each planet
 const planetOrbitalAngles = {};
 
-// Sun
+// Sun with custom shader
 const sunGeometry = new THREE.SphereGeometry(5, 64, 64);
-const sunMaterial = new THREE.MeshBasicMaterial({
-    map: textureLoader.load('/src/textures/sun.jpg'),
-    emissive: 0xffff00,
-    emissiveIntensity: 0.5,
+const sunTexture = textureLoader.load('/src/textures/sun.jpg');
+const sunUniforms = {
+    uTime: { value: 0 },
+    uTexture: { value: sunTexture }
+};
+
+const sunMaterial = new THREE.ShaderMaterial({
+    uniforms: sunUniforms,
+    vertexShader: sunVertexShader,
+    fragmentShader: sunFragmentShader,
+    transparent: true
 });
+
 const sun = new THREE.Mesh(sunGeometry, sunMaterial);
 scene.add(sun);
 planets.sun = sun;
@@ -75,7 +127,9 @@ planetData.forEach(planet => {
     const geometry = new THREE.SphereGeometry(planet.size, 32, 32);
     const material = new THREE.MeshStandardMaterial({
         map: textureLoader.load(`/src/textures/${planet.texture}`),
-        roughness: 1,
+        roughness: 0.8,
+        metalness: 0.1,
+        envMapIntensity: 0.5
     });
     
     const mesh = new THREE.Mesh(geometry, material);
@@ -93,7 +147,11 @@ planetData.forEach(planet => {
     
     // Create orbit line
     const orbitGeometry = new THREE.BufferGeometry();
-    const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x444444 });
+    const orbitMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x444444,
+        transparent: true,
+        opacity: 0.3
+    });
     
     const orbitPoints = [];
     const segments = 128;
@@ -118,6 +176,7 @@ planetData.forEach(planet => {
             map: textureLoader.load('/src/textures/saturn_rings.png'),
             side: THREE.DoubleSide,
             transparent: true,
+            opacity: 0.9
         });
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
         ring.rotation.x = Math.PI / 2;
@@ -237,9 +296,19 @@ closeButton.addEventListener('click', () => {
 
 // Handle window resize
 window.addEventListener('resize', () => {
+    // Update camera
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    
+    // Update renderer and composer
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    
+    // Update FXAA pass
+    fxaaPass.material.uniforms['resolution'].value.set(
+        1 / (window.innerWidth * renderer.getPixelRatio()),
+        1 / (window.innerHeight * renderer.getPixelRatio())
+    );
 });
 
 // Handle mouse click for planet selection
@@ -312,6 +381,9 @@ function animate() {
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
     
+    // Update sun shader uniforms
+    sunUniforms.uTime.value += deltaTime;
+    
     // Handle camera animation
     if (isCameraAnimating) {
         const elapsed = currentTime - cameraAnimationStartTime;
@@ -354,7 +426,9 @@ function animate() {
     });
     
     controls.update();
-    renderer.render(scene, camera);
+    
+    // Render with post-processing
+    composer.render();
 }
 
 // Set Earth as the initial focus

@@ -139,10 +139,90 @@ const planetDayLengthElement = document.getElementById('planet-day-length');
 const planetYearLengthElement = document.getElementById('planet-year-length');
 const closeButton = document.getElementById('close-btn');
 
+// Planet list elements
+const planetListItems = document.querySelectorAll('#planet-menu li');
+let activePlanetItem = null;
+
 // Speed control elements
 const speedSlider = document.getElementById('speed-slider');
 const speedValue = document.getElementById('speed-value');
 let speedMultiplier = 1.0;
+
+// Camera animation properties
+let isCameraAnimating = false;
+let cameraAnimationStartTime = 0;
+let cameraAnimationDuration = 1000; // 1 second
+let cameraStartPosition = new THREE.Vector3();
+let cameraEndPosition = new THREE.Vector3();
+let controlsStartTarget = new THREE.Vector3();
+let controlsEndTarget = new THREE.Vector3();
+
+// Function to focus camera on a planet
+function focusOnPlanet(planetName) {
+    const planet = planets[planetName];
+    if (!planet) return;
+    
+    // Find planet data
+    const planetInfo = planetData.find(p => p.name.toLowerCase() === planetName);
+    
+    // Update active planet in the list
+    if (activePlanetItem) {
+        activePlanetItem.classList.remove('active');
+    }
+    
+    // Find and set the active planet item
+    planetListItems.forEach(item => {
+        if (item.getAttribute('data-planet') === planetName) {
+            item.classList.add('active');
+            activePlanetItem = item;
+        }
+    });
+    
+    // Set up camera animation
+    isCameraAnimating = true;
+    cameraAnimationStartTime = performance.now();
+    
+    // Store start positions
+    cameraStartPosition.copy(camera.position);
+    controlsStartTarget.copy(controls.target);
+    
+    // Calculate end positions
+    const planetPosition = new THREE.Vector3().copy(planet.position);
+    controlsEndTarget.copy(planetPosition);
+    
+    // Calculate appropriate distance based on planet size
+    const size = planetInfo ? planetInfo.size : 1;
+    const distance = size * 15;
+    
+    // Position camera at an angle to the planet
+    const angle = Math.random() * Math.PI * 2; // Random angle for variety
+    cameraEndPosition.set(
+        planetPosition.x + Math.cos(angle) * distance,
+        planetPosition.y + distance * 0.5,
+        planetPosition.z + Math.sin(angle) * distance
+    );
+    
+    // Update info panel with planet information
+    if (planetInfo) {
+        planetNameElement.textContent = planetInfo.name;
+        planetDescriptionElement.textContent = planetInfo.description;
+        planetDistanceElement.textContent = `Distance from Sun: ${planetInfo.distanceFromSun}`;
+        planetDiameterElement.textContent = `Diameter: ${planetInfo.diameter}`;
+        planetDayLengthElement.textContent = `Day Length: ${planetInfo.dayLength}`;
+        planetYearLengthElement.textContent = `Year Length: ${planetInfo.yearLength}`;
+        
+        // Show info panel
+        infoPanel.classList.add('visible');
+    }
+}
+
+// Add click event listeners to planet list items
+planetListItems.forEach(item => {
+    item.addEventListener('click', () => {
+        const planetName = item.getAttribute('data-planet');
+        focusOnPlanet(planetName);
+    });
+});
 
 // Update speed value display and multiplier when slider changes
 speedSlider.addEventListener('input', (event) => {
@@ -164,6 +244,14 @@ window.addEventListener('resize', () => {
 
 // Handle mouse click for planet selection
 window.addEventListener('click', (event) => {
+    // Ignore clicks on UI elements
+    if (event.target.closest('#planet-list') || 
+        event.target.closest('#info-panel') || 
+        event.target.closest('#speed-control') ||
+        event.target.closest('#instructions')) {
+        return;
+    }
+    
     // Calculate mouse position in normalized device coordinates
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -180,37 +268,17 @@ window.addEventListener('click', (event) => {
     if (intersects.length > 0) {
         const selectedPlanet = intersects[0].object;
         
-        // Find the planet data
-        const planetInfo = planetData.find(p => 
-            planets[p.name.toLowerCase()] === selectedPlanet
-        );
+        // Find the planet name
+        let selectedPlanetName = '';
+        for (const [name, planet] of Object.entries(planets)) {
+            if (planet === selectedPlanet) {
+                selectedPlanetName = name;
+                break;
+            }
+        }
         
-        if (planetInfo) {
-            // Update info panel
-            planetNameElement.textContent = planetInfo.name;
-            planetDescriptionElement.textContent = planetInfo.description;
-            planetDistanceElement.textContent = `Distance from Sun: ${planetInfo.distanceFromSun}`;
-            planetDiameterElement.textContent = `Diameter: ${planetInfo.diameter}`;
-            planetDayLengthElement.textContent = `Day Length: ${planetInfo.dayLength}`;
-            planetYearLengthElement.textContent = `Year Length: ${planetInfo.yearLength}`;
-            
-            // Show info panel
-            infoPanel.classList.add('visible');
-            
-            // Move camera to focus on the selected planet
-            const distance = selectedPlanet.geometry.parameters.radius * 5;
-            const planetPosition = new THREE.Vector3().copy(selectedPlanet.position);
-            
-            // Animate camera movement
-            const startPosition = camera.position.clone();
-            const endPosition = new THREE.Vector3(
-                planetPosition.x + distance,
-                planetPosition.y + distance / 2,
-                planetPosition.z + distance
-            );
-            
-            // Set controls target to planet position
-            controls.target.copy(planetPosition);
+        if (selectedPlanetName) {
+            focusOnPlanet(selectedPlanetName);
         }
     }
 });
@@ -230,6 +298,11 @@ const basePlanetSpeeds = {
 // Track the last timestamp for calculating delta time
 let lastTime = performance.now();
 
+// Easing function for smooth camera animation
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
@@ -238,6 +311,24 @@ function animate() {
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
+    
+    // Handle camera animation
+    if (isCameraAnimating) {
+        const elapsed = currentTime - cameraAnimationStartTime;
+        const progress = Math.min(elapsed / cameraAnimationDuration, 1);
+        const easedProgress = easeOutCubic(progress);
+        
+        // Interpolate camera position
+        camera.position.lerpVectors(cameraStartPosition, cameraEndPosition, easedProgress);
+        
+        // Interpolate controls target
+        controls.target.lerpVectors(controlsStartTarget, controlsEndTarget, easedProgress);
+        
+        // Check if animation is complete
+        if (progress >= 1) {
+            isCameraAnimating = false;
+        }
+    }
     
     // Rotate sun
     sun.rotation.y += 0.001 * speedMultiplier * deltaTime * 60;
@@ -265,5 +356,10 @@ function animate() {
     controls.update();
     renderer.render(scene, camera);
 }
+
+// Set Earth as the initial focus
+setTimeout(() => {
+    focusOnPlanet('earth');
+}, 1000);
 
 animate(); 

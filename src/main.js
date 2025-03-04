@@ -171,15 +171,33 @@ planetData.forEach(planet => {
     
     // Add rings for Saturn
     if (planet.name === 'Saturn') {
-        const ringGeometry = new THREE.RingGeometry(planet.size + 0.5, planet.size + 2, 64);
+        // Create a ring for Saturn using RingGeometry
+        const innerRadius = planet.size + 0.5;
+        const outerRadius = planet.size + 2.5;
+        const segments = 64;
+        
+        // Create ring geometry
+        const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+        
+        // Load Saturn rings texture
+        const ringTexture = textureLoader.load('/src/textures/saturn_rings.png');
+        
+        // Create material with the texture
         const ringMaterial = new THREE.MeshBasicMaterial({
-            map: textureLoader.load('/src/textures/saturn_rings.png'),
+            map: ringTexture,
             side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.9
+            opacity: 0.9,
+            alphaTest: 0.1
         });
+        
+        // Create the ring mesh
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.rotation.x = Math.PI / 2;
+        
+        // Rotate the ring to be horizontal around Saturn
+        ring.rotation.x = -Math.PI / 2;
+        
+        // Add the ring to Saturn
         mesh.add(ring);
     }
 });

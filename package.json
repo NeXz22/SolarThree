@@ -1,7 +1,7 @@
 {
   "name": "solarthree",
   "version": "1.0.0",
-  "description": "",
+  "description": "Interactive 3D Solar System visualization using Three.js",
   "homepage": "https://github.com/NeXz22/SolarThree#readme",
   "bugs": {
     "url": "https://github.com/NeXz22/SolarThree/issues"
@@ -12,9 +12,17 @@
   },
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.8"
   }
 }

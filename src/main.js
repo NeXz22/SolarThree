@@ -53,6 +53,9 @@ const planets = {};
 const planetOrbitLines = {};
 const textureLoader = new THREE.TextureLoader();
 
+// Track orbital angles for each planet
+const planetOrbitalAngles = {};
+
 // Sun
 const sunGeometry = new THREE.SphereGeometry(5, 64, 64);
 const sunMaterial = new THREE.MeshBasicMaterial({
@@ -80,9 +83,13 @@ planetData.forEach(planet => {
     // Position planet at its orbital distance
     mesh.position.x = planet.distance;
     
+    // Initialize orbital angle
+    const planetName = planet.name.toLowerCase();
+    planetOrbitalAngles[planetName] = Math.random() * Math.PI * 2; // Random starting position
+    
     // Add planet to scene and store reference
     scene.add(mesh);
-    planets[planet.name.toLowerCase()] = mesh;
+    planets[planetName] = mesh;
     
     // Create orbit line
     const orbitGeometry = new THREE.BufferGeometry();
@@ -102,7 +109,7 @@ planetData.forEach(planet => {
     orbitGeometry.setAttribute('position', new THREE.Float32BufferAttribute(orbitPoints, 3));
     const orbit = new THREE.Line(orbitGeometry, orbitMaterial);
     scene.add(orbit);
-    planetOrbitLines[planet.name.toLowerCase()] = orbit;
+    planetOrbitLines[planetName] = orbit;
     
     // Add rings for Saturn
     if (planet.name === 'Saturn') {
@@ -131,6 +138,17 @@ const planetDiameterElement = document.getElementById('planet-diameter');
 const planetDayLengthElement = document.getElementById('planet-day-length');
 const planetYearLengthElement = document.getElementById('planet-year-length');
 const closeButton = document.getElementById('close-btn');
+
+// Speed control elements
+const speedSlider = document.getElementById('speed-slider');
+const speedValue = document.getElementById('speed-value');
+let speedMultiplier = 1.0;
+
+// Update speed value display and multiplier when slider changes
+speedSlider.addEventListener('input', (event) => {
+    speedMultiplier = parseFloat(event.target.value);
+    speedValue.textContent = `${speedMultiplier.toFixed(1)}x`;
+});
 
 // Close info panel when close button is clicked
 closeButton.addEventListener('click', () => {
@@ -197,8 +215,8 @@ window.addEventListener('click', (event) => {
     }
 });
 
-// Animation variables
-const planetSpeeds = {
+// Base animation speeds for planets
+const basePlanetSpeeds = {
     mercury: 0.004,
     venus: 0.0015,
     earth: 0.001,
@@ -209,27 +227,38 @@ const planetSpeeds = {
     neptune: 0.00007,
 };
 
+// Track the last timestamp for calculating delta time
+let lastTime = performance.now();
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
+    // Calculate delta time in seconds
+    const currentTime = performance.now();
+    const deltaTime = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+    
     // Rotate sun
-    sun.rotation.y += 0.001;
+    sun.rotation.y += 0.001 * speedMultiplier * deltaTime * 60;
     
     // Rotate and orbit planets
     Object.entries(planets).forEach(([name, planet]) => {
         if (name === 'sun') return;
         
         // Rotate planet
-        planet.rotation.y += 0.01;
+        planet.rotation.y += 0.01 * speedMultiplier * deltaTime * 60;
         
-        // Orbit planet
-        if (planetSpeeds[name]) {
-            const speed = planetSpeeds[name];
+        // Orbit planet with speed multiplier
+        if (basePlanetSpeeds[name]) {
+            // Update orbital angle based on speed and delta time
+            planetOrbitalAngles[name] += basePlanetSpeeds[name] * speedMultiplier * deltaTime * 60;
+            
             const distance = planetData.find(p => p.name.toLowerCase() === name)?.distance || 0;
             
-            planet.position.x = Math.cos(Date.now() * speed) * distance;
-            planet.position.z = Math.sin(Date.now() * speed) * distance;
+            // Update planet position based on its orbital angle
+            planet.position.x = Math.cos(planetOrbitalAngles[name]) * distance;
+            planet.position.z = Math.sin(planetOrbitalAngles[name]) * distance;
         }
     });
     

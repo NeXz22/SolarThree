@@ -2,6 +2,8 @@
 
 An interactive 3D Solar System visualization built with Three.js.
 
+![alt text](./screenshot.jpeg)
+
 ## Features
 
 - Fullscreen 3D visualization of the Solar System

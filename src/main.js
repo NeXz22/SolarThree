@@ -171,34 +171,38 @@ planetData.forEach(planet => {
     
     // Add rings for Saturn
     if (planet.name === 'Saturn') {
-        // Create a ring for Saturn using RingGeometry
-        const innerRadius = planet.size + 0.5;
-        const outerRadius = planet.size + 2.5;
-        const segments = 64;
+        // Create a container for all rings
+        const ringsContainer = new THREE.Object3D();
         
-        // Create ring geometry
-        const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+        // Define ring colors and sizes
+        const ringData = [
+            { innerRadius: planet.size + 0.5, outerRadius: planet.size + 0.8, color: 0xf0e2c9, opacity: 0.6 },
+            { innerRadius: planet.size + 0.9, outerRadius: planet.size + 1.2, color: 0xe0c9a0, opacity: 0.8 },
+            { innerRadius: planet.size + 1.3, outerRadius: planet.size + 1.5, color: 0xd0b88c, opacity: 0.7 },
+            { innerRadius: planet.size + 1.6, outerRadius: planet.size + 1.9, color: 0xc0a678, opacity: 0.9 },
+            { innerRadius: planet.size + 2.0, outerRadius: planet.size + 2.2, color: 0xb09564, opacity: 0.7 },
+            { innerRadius: planet.size + 2.3, outerRadius: planet.size + 2.5, color: 0xa08450, opacity: 0.5 }
+        ];
         
-        // Load Saturn rings texture
-        const ringTexture = textureLoader.load('/src/textures/saturn_rings.png');
-        
-        // Create material with the texture
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            map: ringTexture,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.9,
-            alphaTest: 0.1
+        // Create each ring
+        ringData.forEach(ring => {
+            const ringGeometry = new THREE.RingGeometry(ring.innerRadius, ring.outerRadius, 64);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: ring.color,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: ring.opacity
+            });
+            
+            const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+            ringsContainer.add(ringMesh);
         });
         
-        // Create the ring mesh
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        // Rotate the rings container to be horizontal
+        ringsContainer.rotation.x = -Math.PI / 2;
         
-        // Rotate the ring to be horizontal around Saturn
-        ring.rotation.x = -Math.PI / 2;
-        
-        // Add the ring to Saturn
-        mesh.add(ring);
+        // Add rings container to Saturn
+        mesh.add(ringsContainer);
     }
 });
 
